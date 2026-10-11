@@ -73,43 +73,7 @@ call, made right before that phase runs, so pod selection for decode defers to t
 moment decode is actually invoked rather than being locked in earlier in the request's
 life. A new orchestration concern becomes a new pipeline step, not a new header.
 
-```
-A. SIDECAR: one cycle + headers   B. COORDINATOR: one call per phase
--------------------------------   ----------------------------------
-
-       Client                            Client
-         |                                 |
-         v                                 v
-  Inference Gateway                 Inference Gateway
-         |                                 |
-         |  ext_proc: ONE cycle            |  no EPP-Profile header:
-         v                                 |  default route
-        EPP                                v
-  picks decode, encode(s) and       Coordinator Service --> side services
-  prefill ALL up front, in a        (step pipeline)         (media download,
-  fixed order                              |                 render / tokenize)
-         |                                 |
-         |  decisions written              |  one call per phase, tagged
-         |  onto request headers:          |  EPP-Profile: encode, prefill
-         |   x-encoder-hosts-ports         |  or decode (re-enters the
-         |   x-prefiller-host-port         |  same Gateway)
-         v                                 v
- +----------------------------+     Inference Gateway <-- ext_proc --> EPP
- | Decode pod                 |            |
- |  SIDECAR reads the headers |            |  one scheduling profile per
- |  and drives the rest:      |            |  phase; the decode pod is
- |   -> encode workers        |            |  picked at the moment decode
- |   -> prefill, max_tokens=1 |            |  is invoked
- |   -> local decode on the   |            v
- |      transferred KV cache  |     Encode / Prefill / Decode vLLM pods
- +----------------------------+     (one InferencePool, no sidecar)
-
-  orchestration lives on the        orchestration lives in front of the
-  decode pod; a new concern         Inference Gateway; a new concern
-  means a new header contract       means a new pipeline step; the other
-  plus new dispatch logic           step internals never have to be
-  inside the sidecar itself         touched or understood
-```
+![Sidecar versus Coordinator: one EPP cycle plus headers, against one EPP call per phase](docs/assets/coordinator-vs-sidecar.svg)
 
 *(Panel B adapted from
 [`docs/coordinator_architecture.md`](https://github.com/llm-d/llm-d-router/blob/main/docs/coordinator_architecture.md);
